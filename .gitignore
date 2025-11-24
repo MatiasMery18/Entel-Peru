@@ -1,0 +1,30 @@
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build outputs
+bin/
+obj/
+Debug/
+Release/
+*/bin/
+*/obj/
+
+## Packages
+packages/
+*.nupkg
+
+## Logs
+*.log
+
+## Others
+_ReSharper*/
+*.DotSettings.user
+TestResults/
+*.db
+*.mdb
+*.opendb
+*.cache
