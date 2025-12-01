@@ -22,6 +22,7 @@ namespace WindowsFormsApp1
             
             this.btnBuscar = new System.Windows.Forms.Button();
             this.btnExportar = new System.Windows.Forms.Button();
+            this.btnFiltro = new System.Windows.Forms.Button();
             this.dgvSabana = new System.Windows.Forms.DataGridView();
             this.lblRows = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.dgvSabana)).BeginInit();
@@ -59,6 +60,12 @@ namespace WindowsFormsApp1
             this.btnExportar.Text = "Exportar a Excel (CSV)";
             this.btnExportar.UseVisualStyleBackColor = true;
             this.btnExportar.Click += new System.EventHandler(this.btnExportar_Click);
+            this.btnFiltro.Location = new System.Drawing.Point(280, 50);
+            this.btnFiltro.Name = "btnFiltro";
+            this.btnFiltro.Size = new System.Drawing.Size(100, 28);
+            this.btnFiltro.Text = "Filtro";
+            this.btnFiltro.UseVisualStyleBackColor = true;
+            this.btnFiltro.Click += new System.EventHandler(this.btnFiltro_Click);
             this.dgvSabana.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
@@ -78,6 +85,7 @@ namespace WindowsFormsApp1
             this.Controls.Add(this.dtHasta);
             this.Controls.Add(this.btnBuscar);
             this.Controls.Add(this.btnExportar);
+            this.Controls.Add(this.btnFiltro);
             this.Controls.Add(this.dgvSabana);
             this.Controls.Add(this.lblRows);
             ((System.ComponentModel.ISupportInitialize)(this.dgvSabana)).EndInit();
@@ -92,6 +100,7 @@ namespace WindowsFormsApp1
         
         private System.Windows.Forms.Button btnBuscar;
         private System.Windows.Forms.Button btnExportar;
+        private System.Windows.Forms.Button btnFiltro;
         private System.Windows.Forms.DataGridView dgvSabana;
         private System.Windows.Forms.Label lblRows;
     }
