@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿﻿﻿﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -22,7 +22,13 @@ namespace WindowsFormsApp1
             InitializeComponent();
             connMaster = ConfigurationManager.ConnectionStrings["DbMaster"]?.ConnectionString ?? @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=master;Integrated Security=True";
             connStr = ConfigurationManager.ConnectionStrings["Db"]?.ConnectionString ?? @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=Entel Peru;Integrated Security=True";
-            EnsureDatabaseAndTables();
+            if (!IsDesignMode())
+                EnsureDatabaseAndTables();
+        }
+
+        static bool IsDesignMode()
+        {
+            return System.ComponentModel.LicenseManager.UsageMode == System.ComponentModel.LicenseUsageMode.Designtime;
         }
 
         void EnsureDatabaseAndTables()

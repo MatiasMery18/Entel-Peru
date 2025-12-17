@@ -1,0 +1,65 @@
+Documentación Técnica - Reporte Sabana + EBS + Kardex (V3)
+
+1. Objetivo
+Generar un reporte unificado que consolide información de ingresos (SabanaIngreso), códigos de almacén (EBS) y nombres de organización (Kardex).
+
+2. Tablas Involucradas
+
+a) dbo.SabanaIngreso
+   - Tabla principal.
+   - Contiene el detalle de los ingresos.
+   - Claves de relación: 
+     - nro_orden (relación con Ebs)
+     - sku (relación con Kardex)
+   - Campo de filtro: fecha_cierre.
+
+b) dbo.Ebs
+   - Tabla secundaria.
+   - Contiene información logística adicional.
+   - Claves de relación: nro_folio O nro_orden.
+   - Campo recuperado: codigo_almacen.
+
+c) dbo.Kardex
+   - Tabla secundaria.
+   - Contiene información de inventario y organización.
+   - Claves de relación: cod_articulo_sku.
+   - Campo recuperado: organizacion (renombrado a nombre_almacen).
+
+3. Relaciones y Flujo de Datos
+
+[SabanaIngreso] (nro_orden) --LEFT JOIN--> [Ebs] (nro_folio OR nro_orden)
+       |
+       (sku)
+       |
+    LEFT JOIN
+       |
+       v
+    [Kardex] (cod_articulo_sku)
+
+Nota: Se utilizan funciones LTRIM y RTRIM en todas las claves de unión para evitar fallos por espacios en blanco. Además, se intenta unir con nro_folio y nro_orden en EBS para maximizar la coincidencia.
+
+4. Consulta SQL
+
+CREATE PROCEDURE dbo.usp_Reporte_SabanaEbsKardex_V3
+@d1 DATE,
+@d2 DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT 
+        S.*, 
+        E.codigo_almacen, 
+        K.organizacion AS nombre_almacen
+    FROM dbo.SabanaIngreso S
+    LEFT JOIN dbo.Ebs E ON LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_folio)) 
+                        OR LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_orden))
+    LEFT JOIN dbo.Kardex K ON LTRIM(RTRIM(S.sku)) = LTRIM(RTRIM(K.cod_articulo_sku))
+    WHERE TRY_CONVERT(DATE, S.fecha_cierre, 23) BETWEEN @d1 AND @d2
+    ORDER BY TRY_CONVERT(DATE, S.fecha_cierre, 23);
+END
+
+5. Manejo de Errores y Validaciones
+- Se utiliza TRY_CONVERT para manejar fechas en formato texto de manera segura.
+- Se utiliza LEFT JOIN para asegurar que no se pierdan registros de SabanaIngreso si faltan datos en Ebs o Kardex.
+- La aplicación valida que la fecha "Desde" no sea mayor a "Hasta".
+- Se captura cualquier excepción SQL durante la ejecución y se muestra al usuario.

@@ -20,5 +20,21 @@ namespace WindowsFormsApp1
                 f.ShowDialog(this);
             }
         }
+
+        void btnCosteIrregular_Click(object sender, EventArgs e)
+        {
+            using (var f = new CosteEbsIrregularForm(connStr))
+            {
+                f.ShowDialog(this);
+            }
+        }
+
+        void btnSabanaEbsKardex_Click(object sender, EventArgs e)
+        {
+            using (var f = new ReporteSabanaEbsKardexForm(connStr))
+            {
+                f.ShowDialog(this);
+            }
+        }
     }
 }
