@@ -56,27 +56,59 @@ namespace WindowsFormsApp1
             }
         }
 
-        void btnBuscar_Click(object sender, EventArgs e)
+        async void btnBuscar_Click(object sender, EventArgs e)
         {
             var col = dateColumn;
             var desde = dtDesde.Value.Date;
             var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
-            using (var con = new SqlConnection(connStr))
+
+            btnBuscar.Enabled = false;
+            btnBuscar.Text = "Buscando...";
+            Cursor = Cursors.WaitCursor;
+
+            try
             {
-                con.Open();
-                using (var cmd = new SqlCommand(storedProcName, con))
+                DataTable dt = await System.Threading.Tasks.Task.Run(() =>
                 {
-                    cmd.CommandType = CommandType.StoredProcedure;
-                    cmd.Parameters.AddWithValue("@d1", desde);
-                    cmd.Parameters.AddWithValue("@d2", hasta);
-                    using (var da = new SqlDataAdapter(cmd))
+                    using (var con = new SqlConnection(connStr))
                     {
-                        currentData = new DataTable();
-                        da.Fill(currentData);
-                        dgvSabana.DataSource = currentData;
-                        lblRows.Text = "Filas: " + currentData.Rows.Count;
+                        con.Open();
+                        using (var cmd = new SqlCommand(storedProcName, con))
+                        {
+                            cmd.CommandTimeout = 300; 
+                            cmd.CommandType = CommandType.StoredProcedure;
+                            cmd.Parameters.AddWithValue("@d1", desde);
+                            cmd.Parameters.AddWithValue("@d2", hasta);
+                            cmd.Parameters.AddWithValue("@top", 1000); // Always limit preview to 1000 at SQL level
+                            
+                            using (var da = new SqlDataAdapter(cmd))
+                            {
+                                var table = new DataTable();
+                                da.Fill(table);
+                                return table;
+                            }
+                        }
                     }
+                });
+
+                currentData = dt;
+                dgvSabana.DataSource = currentData;
+                lblRows.Text = "Filas: " + currentData.Rows.Count + (currentData.Rows.Count >= 1000 ? " (Vista Previa - Limitado a 1000)" : "");
+                
+                if (currentData.Rows.Count >= 1000)
+                {
+                    MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al buscar: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnBuscar.Enabled = true;
+                btnBuscar.Text = "Buscar";
+                Cursor = Cursors.Default;
             }
         }
 
@@ -109,41 +141,120 @@ namespace WindowsFormsApp1
             using (var con = new SqlConnection(connStr))
             {
                 con.Open();
-                using (var check = new SqlCommand("SELECT OBJECT_ID(@name,'P')", con))
+
+                // Drop if exists
+                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_SabanaIngreso_RangoFecha', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_SabanaIngreso_RangoFecha", con))
                 {
-                    check.Parameters.AddWithValue("@name", storedProcName);
-                    var exists = check.ExecuteScalar();
-                    if (exists == null || exists == DBNull.Value)
-                    {
-                        var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_RangoFecha
+                    cmdDrop.ExecuteNonQuery();
+                }
+
+                // Recreate with logic to handle potential varchar dates AND limit parameter
+                var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_RangoFecha
 @d1 DATETIME2,
-@d2 DATETIME2
+@d2 DATETIME2,
+@top INT = NULL -- Optional limit
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT * FROM dbo.SabanaIngreso WHERE [fecha_cierre] BETWEEN @d1 AND @d2 ORDER BY [fecha_cierre];
+    
+    IF @top IS NOT NULL
+    BEGIN
+        SELECT TOP (@top) * 
+        FROM dbo.SabanaIngreso 
+        WHERE TRY_CAST([fecha_cierre] AS DATE) BETWEEN @d1 AND @d2 
+        ORDER BY TRY_CAST([fecha_cierre] AS DATE);
+    END
+    ELSE
+    BEGIN
+        SELECT * 
+        FROM dbo.SabanaIngreso 
+        WHERE TRY_CAST([fecha_cierre] AS DATE) BETWEEN @d1 AND @d2 
+        ORDER BY TRY_CAST([fecha_cierre] AS DATE);
+    END
 END";
-                        using (var cmd = new SqlCommand(create, con)) cmd.ExecuteNonQuery();
-                    }
-                }
+                using (var cmd = new SqlCommand(create, con)) cmd.ExecuteNonQuery();
             }
         }
 
-        void btnExportar_Click(object sender, EventArgs e)
+        async void btnExportar_Click(object sender, EventArgs e)
         {
-            if (dgvSabana.DataSource == null || dgvSabana.Rows.Count == 0)
+            if (dgvSabana.DataSource == null && (dtDesde.Value > dtHasta.Value))
             {
-                MessageBox.Show("No hay datos para exportar", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                 MessageBox.Show("Rango de fechas inválido.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                 return;
             }
+
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
                 sfd.FileName = "SabanaIngreso.csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
-                    ExportDataTableToCsv(dgvSabana, sfd.FileName);
-                    MessageBox.Show("Exportado", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    var path = sfd.FileName;
+                    var desde = dtDesde.Value.Date;
+                    var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
+
+                    btnExportar.Enabled = false;
+                    btnExportar.Text = "Exportando...";
+                    Cursor = Cursors.WaitCursor;
+
+                    try
+                    {
+                        await System.Threading.Tasks.Task.Run(() =>
+                        {
+                            using (var con = new SqlConnection(connStr))
+                            {
+                                con.Open();
+                                using (var cmd = new SqlCommand(storedProcName, con))
+                                {
+                                    cmd.CommandTimeout = 600; 
+                                    cmd.CommandType = CommandType.StoredProcedure;
+                                    cmd.Parameters.AddWithValue("@d1", desde);
+                                    cmd.Parameters.AddWithValue("@d2", hasta);
+                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit for export
+
+                                    using (var reader = cmd.ExecuteReader())
+                                    {
+                                        using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                                        {
+                                            // Write Header
+                                            for (int i = 0; i < reader.FieldCount; i++)
+                                            {
+                                                sw.Write(EscapeCsv(reader.GetName(i)));
+                                                if (i < reader.FieldCount - 1) sw.Write(",");
+                                            }
+                                            sw.WriteLine();
+
+                                            // Write Rows
+                                            while (reader.Read())
+                                            {
+                                                for (int i = 0; i < reader.FieldCount; i++)
+                                                {
+                                                    if (!reader.IsDBNull(i))
+                                                    {
+                                                        sw.Write(EscapeCsv(reader[i].ToString()));
+                                                    }
+                                                    if (i < reader.FieldCount - 1) sw.Write(",");
+                                                }
+                                                sw.WriteLine();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        MessageBox.Show("Exportación completada exitosamente.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error al exportar: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    finally
+                    {
+                        btnExportar.Enabled = true;
+                        btnExportar.Text = "Exportar a Excel (CSV)";
+                        Cursor = Cursors.Default;
+                    }
                 }
             }
         }

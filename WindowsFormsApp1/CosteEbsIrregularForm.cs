@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsFormsApp1
@@ -56,7 +57,7 @@ namespace WindowsFormsApp1
             }
         }
 
-        void btnBuscar_Click(object sender, EventArgs e)
+        async void btnBuscar_Click(object sender, EventArgs e)
         {
             if (dtDesde.Value > dtHasta.Value)
             {
@@ -67,61 +68,161 @@ namespace WindowsFormsApp1
             var desde = dtDesde.Value.Date;
             var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
             
-            using (var con = new SqlConnection(connStr))
+            btnBuscar.Enabled = false;
+            btnBuscar.Text = "Buscando...";
+            Cursor = Cursors.WaitCursor;
+
+            try 
             {
-                con.Open();
-                using (var cmd = new SqlCommand(storedProcName, con))
+                DataTable dt = await Task.Run(() => 
                 {
-                    cmd.CommandType = CommandType.StoredProcedure;
-                    cmd.Parameters.Add("@d1", SqlDbType.Date).Value = desde;
-                    cmd.Parameters.Add("@d2", SqlDbType.Date).Value = hasta;
-                    using (var da = new SqlDataAdapter(cmd))
+                    using (var con = new SqlConnection(connStr))
                     {
-                        currentData = new DataTable();
-                        da.Fill(currentData);
-                        
-                        string sortOrder = "ASC";
-                        if (cmbOrden.SelectedItem != null && cmbOrden.SelectedItem.ToString() == "Descendente")
+                        con.Open();
+                        using (var cmd = new SqlCommand(storedProcName, con))
                         {
-                            sortOrder = "DESC";
-                        }
-                        currentData.DefaultView.Sort = "fecha_cierre " + sortOrder;
-
-                        dgvSabana.DataSource = currentData.DefaultView;
-                        
-                        if (dgvSabana.Columns.Contains("id_sabana_ingreso"))
-                            dgvSabana.Columns["id_sabana_ingreso"].Visible = false;
-                        if (dgvSabana.Columns.Contains("fecha_cierre"))
-                            dgvSabana.Columns["fecha_cierre"].Visible = false;
+                            cmd.CommandTimeout = 300; 
+                            cmd.CommandType = CommandType.StoredProcedure;
+                            cmd.Parameters.AddWithValue("@d1", desde);
+                            cmd.Parameters.AddWithValue("@d2", hasta);
+                            cmd.Parameters.AddWithValue("@top", 1000); // SQL level limit
                             
-                        if (dgvSabana.Columns.Contains("costo_EBS"))
-                        {
-                            dgvSabana.Columns["costo_EBS"].Visible = true;
-                            dgvSabana.Columns["costo_EBS"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-                            dgvSabana.Columns["costo_EBS"].HeaderText = "Costo EBS";
+                            using (var da = new SqlDataAdapter(cmd))
+                            {
+                                var table = new DataTable();
+                                da.Fill(table);
+                                return table;
+                            }
                         }
-
-                        lblRows.Text = "Filas: " + currentData.Rows.Count;
                     }
+                });
+
+                currentData = dt;
+                
+                string sortOrder = "ASC";
+                if (cmbOrden.SelectedItem != null && cmbOrden.SelectedItem.ToString() == "Descendente")
+                {
+                    sortOrder = "DESC";
                 }
+                currentData.DefaultView.Sort = "fecha_cierre " + sortOrder;
+
+                dgvSabana.DataSource = currentData.DefaultView;
+                
+                if (dgvSabana.Columns.Contains("id_sabana_ingreso"))
+                    dgvSabana.Columns["id_sabana_ingreso"].Visible = false;
+                if (dgvSabana.Columns.Contains("fecha_cierre"))
+                    dgvSabana.Columns["fecha_cierre"].Visible = false;
+
+                // Ajustar columnas para que todas sean visibles y tengan ancho basado en contenido y cabecera
+                dgvSabana.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
+
+                if (dgvSabana.Columns.Contains("costo_EBS"))
+                {
+                    var col = dgvSabana.Columns["costo_EBS"];
+                    col.HeaderText = "Costo EBS";
+                    col.MinimumWidth = 100; // Ancho mínimo garantizado
+                    col.DefaultCellStyle.BackColor = System.Drawing.Color.LightYellow; // Resaltar columna importante
+                    col.DefaultCellStyle.Font = new System.Drawing.Font(dgvSabana.Font, System.Drawing.FontStyle.Bold);
+                }
+
+                lblRows.Text = "Filas: " + currentData.Rows.Count + (currentData.Rows.Count >= 1000 ? " (Vista Previa - Limitado a 1000)" : "");
+                
+                if (currentData.Rows.Count >= 1000)
+                {
+                     MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al buscar datos: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnBuscar.Enabled = true;
+                btnBuscar.Text = "Buscar";
+                Cursor = Cursors.Default;
             }
         }
 
-        void btnExportar_Click(object sender, EventArgs e)
+        async void btnExportar_Click(object sender, EventArgs e)
         {
-            if (dgvSabana.DataSource == null || dgvSabana.Rows.Count == 0)
+            if (dgvSabana.DataSource == null && (dtDesde.Value > dtHasta.Value))
             {
-                MessageBox.Show("No hay datos para exportar", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Rango de fechas inválido.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
                 sfd.FileName = "CosteIrregular.csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
-                    ExportDataTableToCsv(dgvSabana, sfd.FileName);
-                    MessageBox.Show("Exportado", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    var path = sfd.FileName;
+                    var desde = dtDesde.Value.Date;
+                    var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
+
+                    btnExportar.Enabled = false;
+                    btnExportar.Text = "Exportando...";
+                    Cursor = Cursors.WaitCursor;
+
+                    try
+                    {
+                        await System.Threading.Tasks.Task.Run(() =>
+                        {
+                            using (var con = new SqlConnection(connStr))
+                            {
+                                con.Open();
+                                using (var cmd = new SqlCommand(storedProcName, con))
+                                {
+                                    cmd.CommandTimeout = 600; 
+                                    cmd.CommandType = CommandType.StoredProcedure;
+                                    cmd.Parameters.AddWithValue("@d1", desde);
+                                    cmd.Parameters.AddWithValue("@d2", hasta);
+                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit for export
+
+                                    using (var reader = cmd.ExecuteReader())
+                                    {
+                                        using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                                        {
+                                            // Write Header
+                                            for (int i = 0; i < reader.FieldCount; i++)
+                                            {
+                                                sw.Write(EscapeCsv(reader.GetName(i)));
+                                                if (i < reader.FieldCount - 1) sw.Write(",");
+                                            }
+                                            sw.WriteLine();
+
+                                            // Write Rows
+                                            while (reader.Read())
+                                            {
+                                                for (int i = 0; i < reader.FieldCount; i++)
+                                                {
+                                                    if (!reader.IsDBNull(i))
+                                                    {
+                                                        sw.Write(EscapeCsv(reader[i].ToString()));
+                                                    }
+                                                    if (i < reader.FieldCount - 1) sw.Write(",");
+                                                }
+                                                sw.WriteLine();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        MessageBox.Show("Exportación completada exitosamente.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error al exportar: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    finally
+                    {
+                        btnExportar.Enabled = true;
+                        btnExportar.Text = "Exportar a Excel (CSV)";
+                        Cursor = Cursors.Default;
+                    }
                 }
             }
         }
@@ -153,28 +254,57 @@ namespace WindowsFormsApp1
             using (var con = new SqlConnection(connStr))
             {
                 con.Open();
-                using (var check = new SqlCommand("SELECT OBJECT_ID(@name,'P')", con))
+                
+                // Drop if exists to ensure definition is up to date
+                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_SabanaIngreso_CosteIrregular_V3', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_SabanaIngreso_CosteIrregular_V3", con))
                 {
-                    check.Parameters.AddWithValue("@name", storedProcName);
-                    var exists = check.ExecuteScalar();
-                    if (exists == null || exists == DBNull.Value)
-                    {
-                        var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_CosteIrregular_V3
-@d1 DATE,
-@d2 DATE
+                    cmdDrop.ExecuteNonQuery();
+                }
+
+                var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_CosteIrregular_V3
+@d1 DATETIME2,
+@d2 DATETIME2,
+@top INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT [id_sabana_ingreso], [fecha_cierre], [costo_EBS]
-    FROM dbo.SabanaIngreso 
-    WHERE TRY_CONVERT(DATE, fecha_cierre, 23) BETWEEN @d1 AND @d2
-    ORDER BY TRY_CONVERT(DATE, fecha_cierre, 23);
+    
+    -- Filter logic:
+    -- 1. Date range
+    -- 2. Bad Costo_EBS: NULL, Empty, Zero, or Non-Numeric (Letters)
+    -- TRY_CAST(costo_EBS AS FLOAT) IS NULL covers Non-Numeric (and real NULLs if passed)
+    -- TRY_CAST(costo_EBS AS FLOAT) = 0 covers '0', '0.00', and potentially empty strings depending on config, so we check '' explicitly too.
+
+    IF @top IS NOT NULL
+    BEGIN
+        SELECT TOP (@top) *
+        FROM dbo.SabanaIngreso 
+        WHERE TRY_CAST(fecha_cierre AS DATE) BETWEEN @d1 AND @d2
+          AND (
+               [costo_EBS] IS NULL 
+            OR LTRIM(RTRIM([costo_EBS])) = '' 
+            OR TRY_CAST([costo_EBS] AS FLOAT) = 0
+            OR TRY_CAST([costo_EBS] AS FLOAT) IS NULL
+          )
+        ORDER BY TRY_CAST(fecha_cierre AS DATE);
+    END
+    ELSE
+    BEGIN
+        SELECT *
+        FROM dbo.SabanaIngreso 
+        WHERE TRY_CAST(fecha_cierre AS DATE) BETWEEN @d1 AND @d2
+          AND (
+               [costo_EBS] IS NULL 
+            OR LTRIM(RTRIM([costo_EBS])) = '' 
+            OR TRY_CAST([costo_EBS] AS FLOAT) = 0
+            OR TRY_CAST([costo_EBS] AS FLOAT) IS NULL
+          )
+        ORDER BY TRY_CAST(fecha_cierre AS DATE);
+    END
 END";
-                        using (var cmdCreate = new SqlCommand(create, con))
-                        {
-                            cmdCreate.ExecuteNonQuery();
-                        }
-                    }
+                using (var cmdCreate = new SqlCommand(create, con))
+                {
+                    cmdCreate.ExecuteNonQuery();
                 }
             }
         }

@@ -36,5 +36,29 @@ namespace WindowsFormsApp1
                 f.ShowDialog(this);
             }
         }
+
+        void btnSubfamilia_Click(object sender, EventArgs e)
+        {
+            using (var f = new ReporteSubfamiliaForm(connStr))
+            {
+                f.ShowDialog(this);
+            }
+        }
+
+        void btnOrdenAbierta_Click(object sender, EventArgs e)
+        {
+            using (var f = new ReporteOrdenAbiertaForm(connStr))
+            {
+                f.ShowDialog(this);
+            }
+        }
+
+        void btnOrdenCerrada_Click(object sender, EventArgs e)
+        {
+            using (var f = new ReporteOrdenCerradaForm(connStr))
+            {
+                f.ShowDialog(this);
+            }
+        }
     }
 }

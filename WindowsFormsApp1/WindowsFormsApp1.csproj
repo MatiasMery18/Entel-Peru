@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -92,6 +92,24 @@
     <Compile Include="ReporteSabanaEbsKardexForm.Designer.cs">
       <DependentUpon>ReporteSabanaEbsKardexForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="ReporteOrdenCerradaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ReporteOrdenCerradaForm.Designer.cs">
+      <DependentUpon>ReporteOrdenCerradaForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ReporteOrdenAbiertaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ReporteOrdenAbiertaForm.Designer.cs">
+      <DependentUpon>ReporteOrdenAbiertaForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ReporteSubfamiliaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ReporteSubfamiliaForm.Designer.cs">
+      <DependentUpon>ReporteSubfamiliaForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Form1.resx">
@@ -109,6 +127,9 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <EmbeddedResource Include="SabanaIngresoForm.resx">
+      <DependentUpon>SabanaIngresoForm.cs</DependentUpon>
+    </EmbeddedResource>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

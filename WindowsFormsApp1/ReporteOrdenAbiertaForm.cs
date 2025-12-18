@@ -4,17 +4,18 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsFormsApp1
 {
-    public partial class ReporteSabanaEbsKardexForm : Form
+    public partial class ReporteOrdenAbiertaForm : Form
     {
         readonly string connStr;
         DataTable currentData;
-        string storedProcName = "dbo.usp_Reporte_SabanaEbsKardex_V3";
+        string storedProcName = "dbo.usp_Reporte_OrdenAbierta_V1";
 
-        public ReporteSabanaEbsKardexForm(string connectionString)
+        public ReporteOrdenAbiertaForm(string connectionString)
         {
             InitializeComponent();
             connStr = connectionString;
@@ -39,12 +40,12 @@ namespace WindowsFormsApp1
                 con.Open();
 
                 // Drop if exists to update definition
-                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_Reporte_SabanaEbsKardex_V3', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_Reporte_SabanaEbsKardex_V3", con))
+                using (var cmdDrop = new SqlCommand($"IF OBJECT_ID('{storedProcName}', 'P') IS NOT NULL DROP PROCEDURE {storedProcName}", con))
                 {
                     cmdDrop.ExecuteNonQuery();
                 }
 
-                var create = @"CREATE PROCEDURE dbo.usp_Reporte_SabanaEbsKardex_V3
+                var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
 @top INT = NULL
@@ -56,12 +57,12 @@ BEGIN
     BEGIN
         SELECT TOP (@top)
             S.*, 
-            E.codigo_almacen, 
-            K.organizacion AS nombre_almacen
+            O.fecha_solicitud,
+            O.estado_orden AS estado_orden_oa,
+            O.flag_pagado,
+            O.pendiente_pago
         FROM dbo.SabanaIngreso S
-        LEFT JOIN dbo.Ebs E ON LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_folio)) 
-                            OR LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_orden))
-        LEFT JOIN dbo.Kardex K ON LTRIM(RTRIM(S.sku)) = LTRIM(RTRIM(K.cod_articulo_sku))
+        INNER JOIN dbo.OrdenAbierta O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
         ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
     END
@@ -69,12 +70,12 @@ BEGIN
     BEGIN
         SELECT 
             S.*, 
-            E.codigo_almacen, 
-            K.organizacion AS nombre_almacen
+            O.fecha_solicitud,
+            O.estado_orden AS estado_orden_oa,
+            O.flag_pagado,
+            O.pendiente_pago
         FROM dbo.SabanaIngreso S
-        LEFT JOIN dbo.Ebs E ON LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_folio)) 
-                            OR LTRIM(RTRIM(S.nro_orden)) = LTRIM(RTRIM(E.nro_orden))
-        LEFT JOIN dbo.Kardex K ON LTRIM(RTRIM(S.sku)) = LTRIM(RTRIM(K.cod_articulo_sku))
+        INNER JOIN dbo.OrdenAbierta O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
         ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
     END
@@ -88,7 +89,7 @@ END";
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Error al crear el procedimiento almacenado: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Error al crear el procedimiento almacenado (Verifique que la tabla 'OrdenAbierta' existe): " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
@@ -110,18 +111,18 @@ END";
 
             try
             {
-                DataTable dt = await System.Threading.Tasks.Task.Run(() =>
+                DataTable dt = await Task.Run(() =>
                 {
                     using (var con = new SqlConnection(connStr))
                     {
                         con.Open();
                         using (var cmd = new SqlCommand(storedProcName, con))
                         {
-                            cmd.CommandTimeout = 300; // 5 minutos
+                            cmd.CommandTimeout = 300; 
                             cmd.CommandType = CommandType.StoredProcedure;
                             cmd.Parameters.AddWithValue("@d1", desde);
                             cmd.Parameters.AddWithValue("@d2", hasta);
-                            cmd.Parameters.AddWithValue("@top", 1000); // SQL Limit
+                            cmd.Parameters.AddWithValue("@top", 1000); // SQL Limit for Preview
                             
                             using (var da = new SqlDataAdapter(cmd))
                             {
@@ -135,11 +136,27 @@ END";
 
                 currentData = dt;
                 dgvReporte.DataSource = currentData;
+                
+                // Adjust columns for visibility
+                dgvReporte.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
+
+                // Highlight new columns
+                string[] newCols = { "fecha_solicitud", "estado_orden_oa", "flag_pagado", "pendiente_pago" };
+                foreach (var colName in newCols)
+                {
+                    if (dgvReporte.Columns.Contains(colName))
+                    {
+                        var col = dgvReporte.Columns[colName];
+                        col.DefaultCellStyle.BackColor = System.Drawing.Color.LightGreen;
+                        col.DefaultCellStyle.Font = new System.Drawing.Font(dgvReporte.Font, System.Drawing.FontStyle.Bold);
+                    }
+                }
+
                 lblRows.Text = "Filas: " + currentData.Rows.Count + (currentData.Rows.Count >= 1000 ? " (Vista Previa - Limitado a 1000)" : "");
                 
                 if (currentData.Rows.Count >= 1000)
                 {
-                    MessageBox.Show("La consulta devolvió muchos resultados. Se muestran solo los primeros 1000 registros para evitar problemas de memoria.\n\nUse el botón 'Exportar' para descargar todos los datos completos.", "Vista Previa Limitada", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa Limitada", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
@@ -156,7 +173,6 @@ END";
 
         async void btnExportar_Click(object sender, EventArgs e)
         {
-            // Allow export even if grid is empty or partial, as long as we have valid dates
             if (dtDesde.Value > dtHasta.Value)
             {
                  MessageBox.Show("Rango de fechas inválido.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -166,7 +182,7 @@ END";
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "ReporteSabanaEbsKardex.csv";
+                sfd.FileName = "ReporteOrdenAbierta.csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -179,14 +195,14 @@ END";
 
                     try
                     {
-                        await System.Threading.Tasks.Task.Run(() =>
+                        await Task.Run(() =>
                         {
                             using (var con = new SqlConnection(connStr))
                             {
                                 con.Open();
                                 using (var cmd = new SqlCommand(storedProcName, con))
                                 {
-                                    cmd.CommandTimeout = 600; // 10 minutes for large exports
+                                    cmd.CommandTimeout = 600; 
                                     cmd.CommandType = CommandType.StoredProcedure;
                                     cmd.Parameters.AddWithValue("@d1", desde);
                                     cmd.Parameters.AddWithValue("@d2", hasta);
@@ -236,21 +252,6 @@ END";
                     }
                 }
             }
-        }
-
-        static void ExportDataTableToCsv(DataGridView grid, string path)
-        {
-            var sb = new StringBuilder();
-            var visibleCols = grid.Columns.Cast<DataGridViewColumn>().Where(c => c.Visible).ToList();
-            var cols = visibleCols.Select(c => EscapeCsv(c.HeaderText));
-            sb.AppendLine(string.Join(",", cols));
-            foreach (DataGridViewRow r in grid.Rows)
-            {
-                if (r.IsNewRow) continue;
-                var cells = visibleCols.Select(c => EscapeCsv(Convert.ToString(r.Cells[c.Index].Value)));
-                sb.AppendLine(string.Join(",", cells));
-            }
-            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
         }
 
         static string EscapeCsv(string input)
