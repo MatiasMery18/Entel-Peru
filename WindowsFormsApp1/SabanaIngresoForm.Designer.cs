@@ -33,6 +33,7 @@ namespace WindowsFormsApp1
             this.dtDesde.Name = "dtDesde";
             this.dtDesde.Size = new System.Drawing.Size(200, 20);
             this.dtDesde.TabIndex = 1;
+            this.dtDesde.ValueChanged += new System.EventHandler(this.dtDesde_ValueChanged);
             // 
             // dtHasta
             // 
@@ -49,6 +50,7 @@ namespace WindowsFormsApp1
             this.lblDesde.Size = new System.Drawing.Size(38, 13);
             this.lblDesde.TabIndex = 0;
             this.lblDesde.Text = "Desde";
+            this.lblDesde.Click += new System.EventHandler(this.lblDesde_Click);
             // 
             // lblHasta
             // 

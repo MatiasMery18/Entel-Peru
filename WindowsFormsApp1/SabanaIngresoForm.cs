@@ -161,15 +161,15 @@ BEGIN
     BEGIN
         SELECT TOP (@top) * 
         FROM dbo.SabanaIngreso 
-        WHERE TRY_CAST([fecha_cierre] AS DATE) BETWEEN @d1 AND @d2 
-        ORDER BY TRY_CAST([fecha_cierre] AS DATE);
+        WHERE TRY_CAST([fecha_solicitud ] AS DATE) BETWEEN @d1 AND @d2 
+        ORDER BY TRY_CAST([fecha_solicitud ] AS DATE);
     END
     ELSE
     BEGIN
         SELECT * 
         FROM dbo.SabanaIngreso 
-        WHERE TRY_CAST([fecha_cierre] AS DATE) BETWEEN @d1 AND @d2 
-        ORDER BY TRY_CAST([fecha_cierre] AS DATE);
+        WHERE TRY_CAST([fecha_solicitud ] AS DATE) BETWEEN @d1 AND @d2 
+        ORDER BY TRY_CAST([fecha_solicitud ] AS DATE);
     END
 END";
                 using (var cmd = new SqlCommand(create, con)) cmd.ExecuteNonQuery();
@@ -270,6 +270,16 @@ END";
                     lblRows.Text = "Filas: " + rows;
                 }
             }
+        }
+
+        private void dtDesde_ValueChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void lblDesde_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
