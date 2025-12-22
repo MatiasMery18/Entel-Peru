@@ -24,6 +24,8 @@ namespace WindowsFormsApp1
             this.btnFiltro = new System.Windows.Forms.Button();
             this.dgvSabana = new System.Windows.Forms.DataGridView();
             this.lblRows = new System.Windows.Forms.Label();
+            this.lblPeriodo = new System.Windows.Forms.Label();
+            this.cmbPeriodo = new System.Windows.Forms.ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.dgvSabana)).BeginInit();
             this.SuspendLayout();
             // 
@@ -33,7 +35,7 @@ namespace WindowsFormsApp1
             this.dtDesde.Name = "dtDesde";
             this.dtDesde.Size = new System.Drawing.Size(200, 20);
             this.dtDesde.TabIndex = 1;
-            this.dtDesde.ValueChanged += new System.EventHandler(this.dtDesde_ValueChanged);
+            this.dtDesde.Visible = false;
             // 
             // dtHasta
             // 
@@ -41,6 +43,7 @@ namespace WindowsFormsApp1
             this.dtHasta.Name = "dtHasta";
             this.dtHasta.Size = new System.Drawing.Size(200, 20);
             this.dtHasta.TabIndex = 3;
+            this.dtHasta.Visible = false;
             // 
             // lblDesde
             // 
@@ -50,7 +53,7 @@ namespace WindowsFormsApp1
             this.lblDesde.Size = new System.Drawing.Size(38, 13);
             this.lblDesde.TabIndex = 0;
             this.lblDesde.Text = "Desde";
-            this.lblDesde.Click += new System.EventHandler(this.lblDesde_Click);
+            this.lblDesde.Visible = false;
             // 
             // lblHasta
             // 
@@ -60,10 +63,11 @@ namespace WindowsFormsApp1
             this.lblHasta.Size = new System.Drawing.Size(35, 13);
             this.lblHasta.TabIndex = 2;
             this.lblHasta.Text = "Hasta";
+            this.lblHasta.Visible = false;
             // 
             // btnBuscar
             // 
-            this.btnBuscar.Location = new System.Drawing.Point(20, 50);
+            this.btnBuscar.Location = new System.Drawing.Point(280, 15);
             this.btnBuscar.Name = "btnBuscar";
             this.btnBuscar.Size = new System.Drawing.Size(100, 28);
             this.btnBuscar.TabIndex = 4;
@@ -73,7 +77,7 @@ namespace WindowsFormsApp1
             // 
             // btnExportar
             // 
-            this.btnExportar.Location = new System.Drawing.Point(130, 50);
+            this.btnExportar.Location = new System.Drawing.Point(390, 15);
             this.btnExportar.Name = "btnExportar";
             this.btnExportar.Size = new System.Drawing.Size(140, 28);
             this.btnExportar.TabIndex = 5;
@@ -83,7 +87,7 @@ namespace WindowsFormsApp1
             // 
             // btnFiltro
             // 
-            this.btnFiltro.Location = new System.Drawing.Point(280, 50);
+            this.btnFiltro.Location = new System.Drawing.Point(540, 15);
             this.btnFiltro.Name = "btnFiltro";
             this.btnFiltro.Size = new System.Drawing.Size(100, 28);
             this.btnFiltro.TabIndex = 6;
@@ -99,25 +103,45 @@ namespace WindowsFormsApp1
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.dgvSabana.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.AllCells;
-            this.dgvSabana.Location = new System.Drawing.Point(20, 90);
+            this.dgvSabana.Location = new System.Drawing.Point(20, 60);
             this.dgvSabana.Name = "dgvSabana";
             this.dgvSabana.ReadOnly = true;
-            this.dgvSabana.Size = new System.Drawing.Size(860, 470);
+            this.dgvSabana.Size = new System.Drawing.Size(860, 520);
             this.dgvSabana.TabIndex = 7;
             // 
             // lblRows
             // 
-            this.lblRows.Location = new System.Drawing.Point(386, 58);
+            this.lblRows.Location = new System.Drawing.Point(660, 20);
             this.lblRows.Name = "lblRows";
             this.lblRows.Size = new System.Drawing.Size(200, 20);
             this.lblRows.TabIndex = 8;
-            this.lblRows.Text = "S";
+            this.lblRows.Text = "";
+            // 
+            // lblPeriodo
+            // 
+            this.lblPeriodo.AutoSize = true;
+            this.lblPeriodo.Location = new System.Drawing.Point(20, 23);
+            this.lblPeriodo.Name = "lblPeriodo";
+            this.lblPeriodo.Size = new System.Drawing.Size(43, 13);
+            this.lblPeriodo.TabIndex = 9;
+            this.lblPeriodo.Text = "Periodo";
+            // 
+            // cmbPeriodo
+            // 
+            this.cmbPeriodo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbPeriodo.FormattingEnabled = true;
+            this.cmbPeriodo.Location = new System.Drawing.Point(70, 19);
+            this.cmbPeriodo.Name = "cmbPeriodo";
+            this.cmbPeriodo.Size = new System.Drawing.Size(180, 21);
+            this.cmbPeriodo.TabIndex = 10;
             // 
             // SabanaIngresoForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(900, 600);
+            this.Controls.Add(this.cmbPeriodo);
+            this.Controls.Add(this.lblPeriodo);
             this.Controls.Add(this.lblDesde);
             this.Controls.Add(this.dtDesde);
             this.Controls.Add(this.lblHasta);
@@ -133,7 +157,6 @@ namespace WindowsFormsApp1
             ((System.ComponentModel.ISupportInitialize)(this.dgvSabana)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
-
         }
 
         private System.Windows.Forms.DateTimePicker dtDesde;
@@ -146,5 +169,7 @@ namespace WindowsFormsApp1
         private System.Windows.Forms.Button btnFiltro;
         private System.Windows.Forms.DataGridView dgvSabana;
         private System.Windows.Forms.Label lblRows;
+        private System.Windows.Forms.Label lblPeriodo;
+        private System.Windows.Forms.ComboBox cmbPeriodo;
     }
 }

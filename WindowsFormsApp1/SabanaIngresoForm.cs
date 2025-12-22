@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsFormsApp1
@@ -12,34 +13,61 @@ namespace WindowsFormsApp1
     {
         readonly string connStr;
         DataTable currentData;
-        string dateColumn;
-        string storedProcName = "dbo.usp_SabanaIngreso_RangoFecha";
+        string storedProcName = "dbo.usp_SabanaIngreso_Periodo_V1";
 
         public SabanaIngresoForm(string connectionString)
         {
             InitializeComponent();
             connStr = connectionString;
-            dtDesde.Value = DateTime.Today.AddDays(-7);
-            dtHasta.Value = DateTime.Today;
-            dateColumn = "fecha_cierre";
+            
             if (!IsDesignMode())
             {
-                btnBuscar.Enabled = ColumnExists(dateColumn);
-                if (!btnBuscar.Enabled)
-                {
-                    MessageBox.Show("La tabla 'SabanaIngreso' no posee la columna 'fecha_cierre'.", "Sabana Ingreso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
                 EnsureStoredProcedure();
-            }
-            else
-            {
-                btnBuscar.Enabled = true;
+                LoadPeriods();
             }
         }
 
         static bool IsDesignMode()
         {
             return System.ComponentModel.LicenseManager.UsageMode == System.ComponentModel.LicenseUsageMode.Designtime;
+        }
+
+        void LoadPeriods()
+        {
+            try
+            {
+                using (var con = new SqlConnection(connStr))
+                {
+                    con.Open();
+                    // Verify if column exists first to avoid crashing if schema is old
+                    if (!ColumnExists("periodo_cierre"))
+                    {
+                        MessageBox.Show("La columna 'periodo_cierre' no existe en la tabla SabanaIngreso.", "Error de Esquema", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    using (var cmd = new SqlCommand("SELECT DISTINCT periodo_cierre FROM dbo.SabanaIngreso WHERE periodo_cierre IS NOT NULL ORDER BY periodo_cierre DESC", con))
+                    {
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            cmbPeriodo.Items.Clear();
+                            while (reader.Read())
+                            {
+                                cmbPeriodo.Items.Add(reader[0].ToString());
+                            }
+                        }
+                    }
+                }
+                
+                if (cmbPeriodo.Items.Count > 0) 
+                    cmbPeriodo.SelectedIndex = 0;
+                else
+                    cmbPeriodo.Items.Add("No hay periodos");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al cargar periodos: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         bool ColumnExists(string columnName)
@@ -56,19 +84,66 @@ namespace WindowsFormsApp1
             }
         }
 
+        void EnsureStoredProcedure()
+        {
+            using (var con = new SqlConnection(connStr))
+            {
+                con.Open();
+
+                // Drop if exists (update definition)
+                using (var cmdDrop = new SqlCommand($"IF OBJECT_ID('{storedProcName}', 'P') IS NOT NULL DROP PROCEDURE {storedProcName}", con))
+                {
+                    cmdDrop.ExecuteNonQuery();
+                }
+
+                // Create new SP
+                var create = $@"CREATE PROCEDURE {storedProcName}
+@periodo VARCHAR(MAX),
+@top INT = NULL -- Optional limit
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF @top IS NOT NULL
+    BEGIN
+        SELECT TOP (@top) * 
+        FROM dbo.SabanaIngreso 
+        WHERE periodo_cierre = @periodo
+        -- ORDER BY clause might be slow if not indexed, removing default sort for speed or sorting by something indexed if possible
+    END
+    ELSE
+    BEGIN
+        SELECT * 
+        FROM dbo.SabanaIngreso 
+        WHERE periodo_cierre = @periodo
+    END
+END";
+                using (var cmd = new SqlCommand(create, con)) cmd.ExecuteNonQuery();
+            }
+        }
+
         async void btnBuscar_Click(object sender, EventArgs e)
         {
-            var col = dateColumn;
-            var desde = dtDesde.Value.Date;
-            var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
+            if (cmbPeriodo.SelectedItem == null)
+            {
+                MessageBox.Show("Seleccione un periodo.", "Validación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var periodo = cmbPeriodo.SelectedItem.ToString();
 
             btnBuscar.Enabled = false;
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
 
+            // Force GC to clear previous data memory if possible
+            currentData = null;
+            dgvSabana.DataSource = null;
+            GC.Collect();
+
             try
             {
-                DataTable dt = await System.Threading.Tasks.Task.Run(() =>
+                DataTable dt = await Task.Run(() =>
                 {
                     using (var con = new SqlConnection(connStr))
                     {
@@ -77,9 +152,8 @@ namespace WindowsFormsApp1
                         {
                             cmd.CommandTimeout = 300; 
                             cmd.CommandType = CommandType.StoredProcedure;
-                            cmd.Parameters.AddWithValue("@d1", desde);
-                            cmd.Parameters.AddWithValue("@d2", hasta);
-                            cmd.Parameters.AddWithValue("@top", 1000); // Always limit preview to 1000 at SQL level
+                            cmd.Parameters.AddWithValue("@periodo", periodo);
+                            cmd.Parameters.AddWithValue("@top", 1000); // Always limit preview to 1000
                             
                             using (var da = new SqlDataAdapter(cmd))
                             {
@@ -112,87 +186,22 @@ namespace WindowsFormsApp1
             }
         }
 
-        
-
-        static void ExportDataTableToCsv(DataGridView grid, string path)
-        {
-            var sb = new StringBuilder();
-            var visibleCols = grid.Columns.Cast<DataGridViewColumn>().Where(c => c.Visible).ToList();
-            var cols = visibleCols.Select(c => EscapeCsv(c.HeaderText));
-            sb.AppendLine(string.Join(",", cols));
-            foreach (DataGridViewRow r in grid.Rows)
-            {
-                if (r.IsNewRow) continue;
-                var cells = visibleCols.Select(c => EscapeCsv(Convert.ToString(r.Cells[c.Index].Value)));
-                sb.AppendLine(string.Join(",", cells));
-            }
-            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
-        }
-
-        static string EscapeCsv(string input)
-        {
-            if (input == null) return "";
-            var s = input.Replace("\"", "\"\"");
-            return "\"" + s + "\"";
-        }
-
-        void EnsureStoredProcedure()
-        {
-            using (var con = new SqlConnection(connStr))
-            {
-                con.Open();
-
-                // Drop if exists
-                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_SabanaIngreso_RangoFecha', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_SabanaIngreso_RangoFecha", con))
-                {
-                    cmdDrop.ExecuteNonQuery();
-                }
-
-                // Recreate with logic to handle potential varchar dates AND limit parameter
-                var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_RangoFecha
-@d1 DATETIME2,
-@d2 DATETIME2,
-@top INT = NULL -- Optional limit
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    IF @top IS NOT NULL
-    BEGIN
-        SELECT TOP (@top) * 
-        FROM dbo.SabanaIngreso 
-        WHERE TRY_CAST([fecha_solicitud ] AS DATE) BETWEEN @d1 AND @d2 
-        ORDER BY TRY_CAST([fecha_solicitud ] AS DATE);
-    END
-    ELSE
-    BEGIN
-        SELECT * 
-        FROM dbo.SabanaIngreso 
-        WHERE TRY_CAST([fecha_solicitud ] AS DATE) BETWEEN @d1 AND @d2 
-        ORDER BY TRY_CAST([fecha_solicitud ] AS DATE);
-    END
-END";
-                using (var cmd = new SqlCommand(create, con)) cmd.ExecuteNonQuery();
-            }
-        }
-
         async void btnExportar_Click(object sender, EventArgs e)
         {
-            if (dgvSabana.DataSource == null && (dtDesde.Value > dtHasta.Value))
+            if (cmbPeriodo.SelectedItem == null)
             {
-                 MessageBox.Show("Rango de fechas inválido.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                 MessageBox.Show("Seleccione un periodo.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                  return;
             }
 
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "SabanaIngreso.csv";
+                sfd.FileName = "SabanaIngreso_" + cmbPeriodo.SelectedItem.ToString() + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
-                    var desde = dtDesde.Value.Date;
-                    var hasta = dtHasta.Value.Date.AddDays(1).AddTicks(-1);
+                    var periodo = cmbPeriodo.SelectedItem.ToString();
 
                     btnExportar.Enabled = false;
                     btnExportar.Text = "Exportando...";
@@ -200,7 +209,7 @@ END";
 
                     try
                     {
-                        await System.Threading.Tasks.Task.Run(() =>
+                        await Task.Run(() =>
                         {
                             using (var con = new SqlConnection(connStr))
                             {
@@ -209,8 +218,7 @@ END";
                                 {
                                     cmd.CommandTimeout = 600; 
                                     cmd.CommandType = CommandType.StoredProcedure;
-                                    cmd.Parameters.AddWithValue("@d1", desde);
-                                    cmd.Parameters.AddWithValue("@d2", hasta);
+                                    cmd.Parameters.AddWithValue("@periodo", periodo);
                                     cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit for export
 
                                     using (var reader = cmd.ExecuteReader())
@@ -254,6 +262,7 @@ END";
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect(); // Suggest garbage collection after large export
                     }
                 }
             }
@@ -272,14 +281,11 @@ END";
             }
         }
 
-        private void dtDesde_ValueChanged(object sender, EventArgs e)
+        static string EscapeCsv(string input)
         {
-
-        }
-
-        private void lblDesde_Click(object sender, EventArgs e)
-        {
-
+            if (input == null) return "";
+            var s = input.Replace("\"", "\"\"");
+            return "\"" + s + "\"";
         }
     }
 }

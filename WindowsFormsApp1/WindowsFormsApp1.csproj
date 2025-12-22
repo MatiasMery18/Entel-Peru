@@ -127,9 +127,6 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <EmbeddedResource Include="ReportesForm.resx">
-      <DependentUpon>ReportesForm.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="SabanaIngresoForm.resx">
       <DependentUpon>SabanaIngresoForm.cs</DependentUpon>
     </EmbeddedResource>

@@ -62,7 +62,7 @@ BEGIN
             O.flag_pagado,
             O.pendiente_pago
         FROM dbo.SabanaIngreso S
-        INNER JOIN dbo.OrdenAbierta O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
+        LEFT JOIN dbo.OrdenAbierta O ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
         ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
     END
@@ -75,7 +75,7 @@ BEGIN
             O.flag_pagado,
             O.pendiente_pago
         FROM dbo.SabanaIngreso S
-        INNER JOIN dbo.OrdenAbierta O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
+        LEFT JOIN dbo.OrdenAbierta O ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
         ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
     END
