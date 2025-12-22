@@ -45,6 +45,10 @@ namespace WindowsFormsApp1
                     cmdDrop.ExecuteNonQuery();
                 }
 
+                // Optimization: 
+                // 1. Added WITH (NOLOCK) to prevent blocking
+                // 2. Removed ORDER BY from TOP query for instant preview
+                // 3. Kept ORDER BY only for full export if needed, or removed for speed
                 var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
@@ -55,29 +59,32 @@ BEGIN
     
     IF @top IS NOT NULL
     BEGIN
+        -- Preview Mode: Fast, no sorting, WITH (NOLOCK)
         SELECT TOP (@top)
             S.*, 
             O.fecha_solicitud,
             O.estado_orden AS estado_orden_oa,
             O.flag_pagado,
             O.pendiente_pago
-        FROM dbo.SabanaIngreso S
-        LEFT JOIN dbo.OrdenAbierta O ON S.nro_orden_item = O.numero_orden_item
+        FROM dbo.SabanaIngreso S WITH (NOLOCK)
+        LEFT JOIN dbo.OrdenAbierta O WITH (NOLOCK) ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-        ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
+        OPTION (HASH JOIN, RECOMPILE);
     END
     ELSE
     BEGIN
+        -- Full Mode: WITH (NOLOCK)
         SELECT 
             S.*, 
             O.fecha_solicitud,
             O.estado_orden AS estado_orden_oa,
             O.flag_pagado,
             O.pendiente_pago
-        FROM dbo.SabanaIngreso S
-        LEFT JOIN dbo.OrdenAbierta O ON S.nro_orden_item = O.numero_orden_item
+        FROM dbo.SabanaIngreso S WITH (NOLOCK)
+        LEFT JOIN dbo.OrdenAbierta O WITH (NOLOCK) ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-        ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
+        ORDER BY TRY_CAST(S.fecha_cierre AS DATE)
+        OPTION (HASH JOIN, RECOMPILE);
     END
 END";
                 try 
@@ -108,6 +115,11 @@ END";
             btnBuscar.Enabled = false;
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
+
+            // Clear previous data and force GC
+            currentData = null;
+            dgvReporte.DataSource = null;
+            GC.Collect();
 
             try
             {
@@ -182,7 +194,7 @@ END";
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "ReporteOrdenAbierta.csv";
+                sfd.FileName = "ReporteOrdenAbierta_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -249,6 +261,7 @@ END";
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect(); // Force GC
                     }
                 }
             }

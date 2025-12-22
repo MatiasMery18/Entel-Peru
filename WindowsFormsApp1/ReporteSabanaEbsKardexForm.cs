@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsFormsApp1
@@ -39,12 +40,12 @@ namespace WindowsFormsApp1
                 con.Open();
 
                 // Drop if exists to update definition
-                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_Reporte_SabanaEbsKardex_V3', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_Reporte_SabanaEbsKardex_V3", con))
+                using (var cmdDrop = new SqlCommand($"IF OBJECT_ID('{storedProcName}', 'P') IS NOT NULL DROP PROCEDURE {storedProcName}", con))
                 {
                     cmdDrop.ExecuteNonQuery();
                 }
 
-                var create = @"CREATE PROCEDURE dbo.usp_Reporte_SabanaEbsKardex_V3
+                var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
 @top INT = NULL
@@ -108,9 +109,14 @@ END";
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
 
+            // Clear previous data and force GC
+            currentData = null;
+            dgvReporte.DataSource = null;
+            GC.Collect();
+
             try
             {
-                DataTable dt = await System.Threading.Tasks.Task.Run(() =>
+                DataTable dt = await Task.Run(() =>
                 {
                     using (var con = new SqlConnection(connStr))
                     {
@@ -121,7 +127,7 @@ END";
                             cmd.CommandType = CommandType.StoredProcedure;
                             cmd.Parameters.AddWithValue("@d1", desde);
                             cmd.Parameters.AddWithValue("@d2", hasta);
-                            cmd.Parameters.AddWithValue("@top", 1000); // SQL Limit
+                            cmd.Parameters.AddWithValue("@top", 1000); // Preview Limit (Memory Optimization)
                             
                             using (var da = new SqlDataAdapter(cmd))
                             {
@@ -139,7 +145,7 @@ END";
                 
                 if (currentData.Rows.Count >= 1000)
                 {
-                    MessageBox.Show("La consulta devolvió muchos resultados. Se muestran solo los primeros 1000 registros para evitar problemas de memoria.\n\nUse el botón 'Exportar' para descargar todos los datos completos.", "Vista Previa Limitada", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa Limitada", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
@@ -156,7 +162,6 @@ END";
 
         async void btnExportar_Click(object sender, EventArgs e)
         {
-            // Allow export even if grid is empty or partial, as long as we have valid dates
             if (dtDesde.Value > dtHasta.Value)
             {
                  MessageBox.Show("Rango de fechas inválido.", "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -166,7 +171,7 @@ END";
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "ReporteSabanaEbsKardex.csv";
+                sfd.FileName = "ReporteSabanaEbsKardex_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -179,18 +184,18 @@ END";
 
                     try
                     {
-                        await System.Threading.Tasks.Task.Run(() =>
+                        await Task.Run(() =>
                         {
                             using (var con = new SqlConnection(connStr))
                             {
                                 con.Open();
                                 using (var cmd = new SqlCommand(storedProcName, con))
                                 {
-                                    cmd.CommandTimeout = 600; // 10 minutes for large exports
+                                    cmd.CommandTimeout = 600; 
                                     cmd.CommandType = CommandType.StoredProcedure;
                                     cmd.Parameters.AddWithValue("@d1", desde);
                                     cmd.Parameters.AddWithValue("@d2", hasta);
-                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit
+                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit for export
 
                                     using (var reader = cmd.ExecuteReader())
                                     {
@@ -233,24 +238,10 @@ END";
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect(); // Force GC after large export
                     }
                 }
             }
-        }
-
-        static void ExportDataTableToCsv(DataGridView grid, string path)
-        {
-            var sb = new StringBuilder();
-            var visibleCols = grid.Columns.Cast<DataGridViewColumn>().Where(c => c.Visible).ToList();
-            var cols = visibleCols.Select(c => EscapeCsv(c.HeaderText));
-            sb.AppendLine(string.Join(",", cols));
-            foreach (DataGridViewRow r in grid.Rows)
-            {
-                if (r.IsNewRow) continue;
-                var cells = visibleCols.Select(c => EscapeCsv(Convert.ToString(r.Cells[c.Index].Value)));
-                sb.AppendLine(string.Join(",", cells));
-            }
-            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
         }
 
         static string EscapeCsv(string input)

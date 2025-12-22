@@ -45,6 +45,10 @@ namespace WindowsFormsApp1
                     cmdDrop.ExecuteNonQuery();
                 }
 
+                // Optimization:
+                // 1. Added WITH (NOLOCK) to prevent blocking
+                // 2. Removed LTRIM(RTRIM) from JOIN to enable index usage (CRITICAL for performance)
+                // 3. Removed ORDER BY from TOP query for instant preview
                 var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
@@ -55,25 +59,28 @@ BEGIN
     
     IF @top IS NOT NULL
     BEGIN
+        -- Preview Mode: Fast, no sorting, WITH (NOLOCK), Direct Join
         SELECT TOP (@top)
             S.*, 
             O.fecha_solicitud,
             O.estado AS estado_oc
-        FROM dbo.SabanaIngreso S
-        INNER JOIN dbo.OrdenCerrada O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
+        FROM dbo.SabanaIngreso S WITH (NOLOCK)
+        INNER JOIN dbo.OrdenCerrada O WITH (NOLOCK) ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-        ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
+        OPTION (HASH JOIN, RECOMPILE);
     END
     ELSE
     BEGIN
+        -- Full Mode: WITH (NOLOCK), Direct Join
         SELECT 
             S.*, 
             O.fecha_solicitud,
             O.estado AS estado_oc
-        FROM dbo.SabanaIngreso S
-        INNER JOIN dbo.OrdenCerrada O ON LTRIM(RTRIM(S.nro_orden_item)) = LTRIM(RTRIM(O.numero_orden_item))
+        FROM dbo.SabanaIngreso S WITH (NOLOCK)
+        INNER JOIN dbo.OrdenCerrada O WITH (NOLOCK) ON S.nro_orden_item = O.numero_orden_item
         WHERE TRY_CAST(S.fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-        ORDER BY TRY_CAST(S.fecha_cierre AS DATE);
+        ORDER BY TRY_CAST(S.fecha_cierre AS DATE)
+        OPTION (HASH JOIN, RECOMPILE);
     END
 END";
                 try 
@@ -104,6 +111,11 @@ END";
             btnBuscar.Enabled = false;
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
+
+            // Clear previous data and force GC
+            currentData = null;
+            dgvReporte.DataSource = null;
+            GC.Collect();
 
             try
             {
@@ -178,7 +190,7 @@ END";
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "ReporteOrdenCerrada.csv";
+                sfd.FileName = "ReporteOrdenCerrada_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -245,6 +257,7 @@ END";
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect(); // Force GC
                     }
                 }
             }

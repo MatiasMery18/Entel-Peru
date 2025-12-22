@@ -40,12 +40,16 @@ namespace WindowsFormsApp1
                 con.Open();
 
                 // Drop if exists to update definition
-                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_Reporte_Subfamilia_V1', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_Reporte_Subfamilia_V1", con))
+                using (var cmdDrop = new SqlCommand($"IF OBJECT_ID('{storedProcName}', 'P') IS NOT NULL DROP PROCEDURE {storedProcName}", con))
                 {
                     cmdDrop.ExecuteNonQuery();
                 }
 
-                var create = @"CREATE PROCEDURE dbo.usp_Reporte_Subfamilia_V1
+                // Create new SP
+                // Identifies subfamilies using SabanaIngreso and MaestraTipoArticulo
+                // Joins on SKU
+                // Filters by Date Range (fecha_cierre)
+                var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
 @top INT = NULL
@@ -83,7 +87,7 @@ END";
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Error al crear el procedimiento almacenado (Verifique que la tabla 'MaestraTipoArticulo' existe): " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Error al crear el procedimiento almacenado (Verifique que la tabla 'MaestraTipoArticulo' existe y tiene las columnas 'sku' y 'tipo_articulo'): " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
@@ -103,9 +107,14 @@ END";
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
 
+            // Clear previous data
+            currentData = null;
+            dgvReporte.DataSource = null;
+            GC.Collect();
+
             try
             {
-                DataTable dt = await System.Threading.Tasks.Task.Run(() =>
+                DataTable dt = await Task.Run(() =>
                 {
                     using (var con = new SqlConnection(connStr))
                     {
@@ -116,7 +125,7 @@ END";
                             cmd.CommandType = CommandType.StoredProcedure;
                             cmd.Parameters.AddWithValue("@d1", desde);
                             cmd.Parameters.AddWithValue("@d2", hasta);
-                            cmd.Parameters.AddWithValue("@top", 1000); // SQL Limit for Preview
+                            cmd.Parameters.AddWithValue("@top", 1000); // Preview Limit (Memory Optimization)
                             
                             using (var da = new SqlDataAdapter(cmd))
                             {
@@ -131,23 +140,21 @@ END";
                 currentData = dt;
                 dgvReporte.DataSource = currentData;
                 
-                // Adjust columns for visibility
-                dgvReporte.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells;
-
+                // Highlight Subfamilia column if exists
                 if (dgvReporte.Columns.Contains("subfamilia"))
                 {
                     var col = dgvReporte.Columns["subfamilia"];
                     col.HeaderText = "Subfamilia";
-                    col.MinimumWidth = 100;
                     col.DefaultCellStyle.BackColor = System.Drawing.Color.LightCyan; 
                     col.DefaultCellStyle.Font = new System.Drawing.Font(dgvReporte.Font, System.Drawing.FontStyle.Bold);
+                    col.DisplayIndex = 0; // Move to front for visibility
                 }
 
                 lblRows.Text = "Filas: " + currentData.Rows.Count + (currentData.Rows.Count >= 1000 ? " (Vista Previa - Limitado a 1000)" : "");
                 
                 if (currentData.Rows.Count >= 1000)
                 {
-                    MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa Limitada", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Se muestran los primeros 1000 registros para una visualización rápida.\nUse 'Exportar' para obtener todos los datos.", "Vista Previa", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
@@ -173,7 +180,7 @@ END";
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "ReporteSubfamilia.csv";
+                sfd.FileName = "ReporteSubfamilia_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -186,7 +193,7 @@ END";
 
                     try
                     {
-                        await System.Threading.Tasks.Task.Run(() =>
+                        await Task.Run(() =>
                         {
                             using (var con = new SqlConnection(connStr))
                             {
@@ -197,7 +204,7 @@ END";
                                     cmd.CommandType = CommandType.StoredProcedure;
                                     cmd.Parameters.AddWithValue("@d1", desde);
                                     cmd.Parameters.AddWithValue("@d2", hasta);
-                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit
+                                    cmd.Parameters.AddWithValue("@top", DBNull.Value); // No limit for export
 
                                     using (var reader = cmd.ExecuteReader())
                                     {
@@ -240,6 +247,7 @@ END";
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect();
                     }
                 }
             }

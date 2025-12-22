@@ -72,6 +72,11 @@ namespace WindowsFormsApp1
             btnBuscar.Text = "Buscando...";
             Cursor = Cursors.WaitCursor;
 
+            // Clear previous data and force GC
+            currentData = null;
+            dgvSabana.DataSource = null;
+            GC.Collect();
+
             try 
             {
                 DataTable dt = await Task.Run(() => 
@@ -155,7 +160,7 @@ namespace WindowsFormsApp1
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV (*.csv)|*.csv";
-                sfd.FileName = "CosteIrregular.csv";
+                sfd.FileName = "CosteIrregular_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     var path = sfd.FileName;
@@ -168,7 +173,7 @@ namespace WindowsFormsApp1
 
                     try
                     {
-                        await System.Threading.Tasks.Task.Run(() =>
+                        await Task.Run(() =>
                         {
                             using (var con = new SqlConnection(connStr))
                             {
@@ -222,6 +227,7 @@ namespace WindowsFormsApp1
                         btnExportar.Enabled = true;
                         btnExportar.Text = "Exportar a Excel (CSV)";
                         Cursor = Cursors.Default;
+                        GC.Collect(); // Force GC
                     }
                 }
             }
@@ -256,12 +262,12 @@ namespace WindowsFormsApp1
                 con.Open();
                 
                 // Drop if exists to ensure definition is up to date
-                using (var cmdDrop = new SqlCommand("IF OBJECT_ID('dbo.usp_SabanaIngreso_CosteIrregular_V3', 'P') IS NOT NULL DROP PROCEDURE dbo.usp_SabanaIngreso_CosteIrregular_V3", con))
+                using (var cmdDrop = new SqlCommand($"IF OBJECT_ID('{storedProcName}', 'P') IS NOT NULL DROP PROCEDURE {storedProcName}", con))
                 {
                     cmdDrop.ExecuteNonQuery();
                 }
 
-                var create = @"CREATE PROCEDURE dbo.usp_SabanaIngreso_CosteIrregular_V3
+                var create = $@"CREATE PROCEDURE {storedProcName}
 @d1 DATETIME2,
 @d2 DATETIME2,
 @top INT = NULL
@@ -280,12 +286,12 @@ BEGIN
         SELECT TOP (@top) *
         FROM dbo.SabanaIngreso 
         WHERE TRY_CAST(fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-          AND (
+        AND (
                [costo_EBS] IS NULL 
             OR LTRIM(RTRIM([costo_EBS])) = '' 
             OR TRY_CAST([costo_EBS] AS FLOAT) = 0
             OR TRY_CAST([costo_EBS] AS FLOAT) IS NULL
-          )
+        )
         ORDER BY TRY_CAST(fecha_cierre AS DATE);
     END
     ELSE
@@ -293,12 +299,12 @@ BEGIN
         SELECT *
         FROM dbo.SabanaIngreso 
         WHERE TRY_CAST(fecha_cierre AS DATE) BETWEEN @d1 AND @d2
-          AND (
+        AND (
                [costo_EBS] IS NULL 
             OR LTRIM(RTRIM([costo_EBS])) = '' 
             OR TRY_CAST([costo_EBS] AS FLOAT) = 0
             OR TRY_CAST([costo_EBS] AS FLOAT) IS NULL
-          )
+        )
         ORDER BY TRY_CAST(fecha_cierre AS DATE);
     END
 END";
